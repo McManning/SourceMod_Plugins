@@ -19,12 +19,17 @@
 #define UFO_MODEL "models/props_nucleus/mp_captop.mdl"
 #define UFO_GRAVITY (0.00001)
 
+#define TF2ITEMS_WEAPONS_OFFSET (3000)
+
 /// @todo Convert to cvars
 #define UFO_HORIZONTAL_FORCE (100.0)
 #define UFO_VERTICAL_FORCE (50.0)
+#define UFO_BASE_HEALTH (5000)
+#define UFO_PRIMARY_ANGULAR_RANGE (15)
 
 /// @todo per-map settings, not hardcoded
 #define UFO_SPAWN_POSITION {-112.0, 444.0, 3366.0}
+#define UFO_SPAWN_RANGE (300.0)
 #define UFO_MIN_Z (1974.0) 
 
 
@@ -37,7 +42,7 @@ enum UFONotification
 };
 
 
-new bool:g_bIsDebugUFO[MAXPLAYERS+1];
+new bool:g_bIsUFO[MAXPLAYERS+1];
 new UFONotification:g_UFONotifyCode[MAXPLAYERS+1];
 
 new g_lastButtons[MAXPLAYERS+1];
@@ -64,21 +69,40 @@ public OnPluginStart()
 	HookEvent("post_inventory_application", Event_InventoryApplication,  
 				EventHookMode_Post);
 				
-	for (new i = 0; i < MAXPLAYERS+1; ++i)
-	{
-		g_bIsDebugUFO[i] = false;
-		g_UFONotifyCode[i] = UFO_NOTIFY_NONE;
-		g_lastButtons[i] = 0;
-	}
+	CleanUp();
 	
 	CreateTimer(1.0, Timer_UFOThink, INVALID_HANDLE, TIMER_REPEAT); /// @todo here or OnMapStart?
 
 	
 	// Construct some alien weaponry
-	TF2Items_CreateWeapon(3000, "tf_weapon_particle_cannon", 441, 0, 3, 100,
-							"107 ; 2.0 ; 6 ; 0.25 ; 134 ; 32 ; 97 ; 0.01 ; 2 ; 10100.0", 
+	
+	// primary
+	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET, "tf_weapon_particle_cannon", 441, 0, 3, 100,
+							"107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
 							5000, "", true);
+	
+	// secondary
+	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET + 1, "tf_weapon_raygun", 442, 1, 3, 100,
+							"107 ; 2.0 ; 281 ; 0.0 ; 6 ; 0.25 ; 97 ; 0.01", 
+							5000, "", true);
+							
+	// spaceships don't need no stinkin' melee... but, just for fun
+	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET + 2, "tf_weapon_bat_fish", 221, 2, 3, 100,
+							"",
+							-1, "", true);
+}
 
+/**
+ * Resets client data, globals, etc.
+ */
+CleanUp()
+{
+	for (new i = 0; i < MAXPLAYERS+1; ++i)
+	{
+		g_bIsUFO[i] = false;
+		g_UFONotifyCode[i] = UFO_NOTIFY_NONE;
+		g_lastButtons[i] = 0;
+	}
 }
 
 public OnMapStart()
@@ -88,7 +112,9 @@ public OnMapStart()
 
 public OnClientDisconnect(client)
 {
-	g_bIsDebugUFO[client] = false;
+	g_bIsUFO[client] = false;
+	g_UFONotifyCode[client] = UFO_NOTIFY_NONE;
+	g_lastButtons[client] = 0;
 }
 
 
@@ -97,7 +123,7 @@ public OnClientDisconnect(client)
 */
 public Action:Command_TestUFO(client, args)
 {
-	if (g_bIsDebugUFO[client]) // disable mode
+	if (g_bIsUFO[client]) // disable mode
 	{
 
 		RemoveUFOModel(client);
@@ -108,16 +134,22 @@ public Action:Command_TestUFO(client, args)
 	}
 	else // give them UFO mode
 	{
-	
-		GiveUFOModel(client);
-		GiveUFOWeapons(client);
+		TF2_SetPlayerClass(client, TFClass_Soldier, true, false);
 		
 		SetEntityGravity(client, UFO_GRAVITY);
 		
 		TeleportToUFOSpawn(client);
+		
+		GiveUFOModel(client);
+		GiveUFOWeapons(client);
+		
+		/// @todo figure out a way to prevent this from decaying to base health
+		// Discussion: http://forums.alliedmods.net/showthread.php?t=159021
+		SetEntProp(client, Prop_Data, "m_iMaxHealth", UFO_BASE_HEALTH);
+		SetEntityHealth(client, UFO_BASE_HEALTH);
 	}
 
-	g_bIsDebugUFO[client] = !g_bIsDebugUFO[client];
+	g_bIsUFO[client] = !g_bIsUFO[client];
 	
 	return Plugin_Handled;
 }
@@ -127,6 +159,10 @@ TeleportToUFOSpawn(client)
 	decl Float:pos[3] = UFO_SPAWN_POSITION;
 	decl Float:vel[3] = { 0.0, 0.0, 0.0 };
 
+	// randomize a bit
+	pos[0] += GetRandomFloat(-UFO_SPAWN_RANGE, UFO_SPAWN_RANGE);
+	pos[1] += GetRandomFloat(-UFO_SPAWN_RANGE, UFO_SPAWN_RANGE);
+	
 	TeleportEntity(client, pos, NULL_VECTOR, vel); 
 }
 
@@ -149,7 +185,7 @@ public Action:Timer_UFOThink(Handle:timer)
 			continue;
 		}
 		
-		if (g_bIsDebugUFO[i])
+		if (g_bIsUFO[i])
 		{
 			CheckUFOHeight(i);
 			CheckUFONotifications(i);
@@ -184,9 +220,9 @@ CheckUFONotifications(client)
 	switch (g_UFONotifyCode[client])
 	{
 		case UFO_NOTIFY_LOOKDOWN:
-			PrintToChat(client, "You need to look down to fire that weapon!"); 
+			PrintCenterText(client, "You need to look down to fire that weapon!"); 
 		case UFO_NOTIFY_TOOLOW:
-			PrintToChat(client, "WARNING: Too low! Pull UP!"); 
+			PrintCenterText(client, "WARNING: Too low! Pull UP!"); 
 	}
 	
 	g_UFONotifyCode[client] = UFO_NOTIFY_NONE;
@@ -198,11 +234,26 @@ CheckUFONotifications(client)
  */
 Action:HandleUFOAttack(client)
 {
-	if (!IsLookingDown(client))
-	{
-		g_UFONotifyCode[client] = UFO_NOTIFY_LOOKDOWN;
-		return Plugin_Handled;
-	}
+	new String:weapon[64];
+	GetClientWeapon(client, weapon, sizeof(weapon));
+	
+	if (StrEqual(weapon, "tf_weapon_particle_cannon")) // primary
+	{ 
+		// only let them fire 
+		if (!IsLookingDown(client))
+		{
+			g_UFONotifyCode[client] = UFO_NOTIFY_LOOKDOWN;
+			return Plugin_Handled;
+		}
+	} 
+	else if (StrEqual(weapon, "tf_weapon_raygun")) // secondary
+	{ 
+		
+	} 
+	else if (StrEqual(weapon, "tf_weapon_bat_fish")) // melee
+	{ 
+		
+	} 
 
 	return Plugin_Continue;
 }
@@ -212,13 +263,17 @@ Action:HandleUFOAttack(client)
  */
 bool:IsLookingDown(client)
 {
-	/// @todo THIS! Use GetClientEyeAngles and make sure we're within range (say 30deg from straight down)
-	return false;
+	decl Float:ang[3];
+
+	// In terms of pitch/yaw/roll, not a direction vector
+	GetClientEyeAngles(client, ang);
+
+	return ang[0] > (90 - UFO_PRIMARY_ANGULAR_RANGE);
 }
 
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon) 
 { 
-	if (g_bIsDebugUFO[client])
+	if (g_bIsUFO[client])
 	{		
 		/// @todo this may be called a little too fast, optimize!
 		if (buttons & IN_ATTACK)
@@ -269,8 +324,6 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 			
 			return Plugin_Handled;
 		}
-		
-		//return Plugin_Handled; //block, we handle it manually
 	}
 	
 	return Plugin_Continue;
@@ -373,7 +426,8 @@ RemoveUFOModel(client)
  */
 GiveUFOWeapons(client)
 {
-	TF2Items_GiveWeapon(client, 3000);
+	for (new i = 2; i > -1; --i)
+		TF2Items_GiveWeapon(client, TF2ITEMS_WEAPONS_OFFSET + i);
 }
 
 /**
