@@ -26,7 +26,7 @@
 /// @todo Convert to cvars
 #define UFO_HORIZONTAL_FORCE (250.0)
 #define UFO_VERTICAL_FORCE (90.0)
-#define UFO_BASE_HEALTH (500)
+#define UFO_BASE_HEALTH (5000)
 #define UFO_PRIMARY_ANGULAR_RANGE (15)
 
 /// @todo per-map settings, not hardcoded
@@ -76,13 +76,13 @@ public OnPluginStart()
 	
 	CreateTimer(1.0, Timer_UFOThink, INVALID_HANDLE, TIMER_REPEAT); /// @todo here or OnMapStart?
 
-	for (new i = 1; i <= MaxClients; i++) 
+	/*for (new i = 1; i <= MaxClients; i++) 
 	{
         if(IsClientInGame(i))
 		{
             SDKHook(i, SDKHook_OnTakeDamage, OnTakeDamage);
 		}
-    }
+    }*/
 	
 	// Construct some alien weaponry
 	
@@ -122,7 +122,7 @@ public OnMapStart()
 }
 
 public OnClientPutInServer(client) {
-    SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+    //SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
 public OnClientDisconnect(client)
@@ -132,9 +132,9 @@ public OnClientDisconnect(client)
 	g_lastButtons[client] = 0;
 }
 
-
-/// @todo Is this necessary now that we set m_takedamage to 0 for UFO players? I don't remember.
-public Action:OnTakeDamage(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3]) 
+// No longer necessary as we modify takedamage. But pyros can still airblast immortals. 
+// So keep for now, if we want to disable pyro airblasting later
+/*public Action:OnTakeDamage(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3]) 
 {
 	// prevent UFOs from being knocked back
     if (victim != attacker && g_bIsUFO[victim])
@@ -145,6 +145,7 @@ public Action:OnTakeDamage(victim, &attacker, &inflictor, &Float:damage, &damage
 	
     return Plugin_Continue;
 }
+*/
 
 /**
  * Set specified player as a UFO entity (give weapons, model, etc) and let them test the control scheme
@@ -284,11 +285,12 @@ CreateUFOHitbox(client)
 	SetEntityModel(prop, UFO_MODEL);
 	
 	DispatchKeyValue(prop, "StartDisabled", "false");
-	
-	// Tweak our collision group so it can take damage, but not collide with the pilot
+
 	DispatchKeyValue(prop, "Solid", "6");
-	SetEntProp(prop, Prop_Data, "m_CollisionGroup", 2); //4); COLLISION_GROUP_DEBRIS_TRIGGER
-	//SetEntProp(prop, Prop_Data, "m_usSolidFlags", 16);
+	
+	// http://docs.sourcemod.net/api/index.php?fastload=show&id=82&
+	SetEntProp(prop, Prop_Data, "m_CollisionGroup", 4); //4);  2 = COLLISION_GROUP_DEBRIS_TRIGGER
+	SetEntProp(prop, Prop_Data, "m_usSolidFlags", 16);
 	SetEntProp(prop, Prop_Data, "m_nSolidType", 6); //SOLID_VPHYSICS (grab VPHYS from the model and use as collision map)
 	
 	DispatchSpawn(prop);
@@ -302,10 +304,55 @@ CreateUFOHitbox(client)
 	
 	HookSingleEntityOutput(prop, "OnTakeDamage", EntityOutput_UFOHitPropDamage, false);
 	
+	SDKHook(prop, SDKHook_ShouldCollide, OnUFOCollisionCheck); 
+	
 	SetEntityRenderMode(prop, RENDER_TRANSCOLOR);
 	SetEntityRenderColor(prop, 0, 0, 0, 50); /// @todo translucent only for debugging
 
 	g_eUFOHitbox[client] = prop;
+}
+
+/**
+ * Hook for UFO collisions to handle special cases (no collide with players or pilot weapons)
+ * @param entity the entity this is hooked to
+ * @param collisiongroup 
+ * @param contentsmask details regarding the collision (see sdkhooks_trace.inc:CONTENTS_*)
+ * @return true if the collision should happen, false otherwise
+ */
+public bool:OnUFOCollisionCheck(entity, collisiongroup, contentsmask, bool:originalResult)
+{
+	/*
+		For a UFO on BLU team:
+			0x201480B <-- collision with player
+			0x200480B <-- hit by our own cow mangler
+			
+		Outside uses TEAM1, inside TEAM2
+		
+		For a UFO on RED team:
+			Other players rockets: 0x200580B
+			My cow mangler: 0x200500B   .: difference of 0x800 (CONTENTS_TEAM1)
+			
+		Outside is TEAM2, inside TEAM1
+	*/
+	
+	/// @todo condense logic
+	if (contentsmask & CONTENTS_TEAM1 == CONTENTS_TEAM1) // collision b/w player/objects of different teams
+	{
+		if (collisiongroup != 8 && (contentsmask & CONTENTS_TEAM2 == CONTENTS_TEAM2))
+		{
+			PrintToChatAll(".sp:319 ent:%i, group:%i, mask:%i, result:%i", entity, collisiongroup, contentsmask, originalResult);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	else // unhandled cases that need to be understood.
+	{
+		PrintToChatAll(".sp:333 group:%i, mask:%i, result:%i", collisiongroup, contentsmask, originalResult);	
+		return true;
+	}
 }
 
 DestroyUFOHitbox(client)
@@ -534,7 +581,7 @@ GiveUFOModel(client)
 		//SetVariantInt(1);
 		//AcceptEntityInput(client, "SetCustomModelRotates");
 		
-		Colorize(client, COLORIZE_INVIS);
+		ColorizeEquipment(client, COLORIZE_INVIS);
 	}
 }
 
@@ -547,7 +594,7 @@ RemoveUFOModel(client)
 	SetVariantString("");
 	AcceptEntityInput(client, "SetCustomModel");
 	
-	Colorize(client, COLORIZE_NORMAL);
+	ColorizeEquipment(client, COLORIZE_NORMAL);
 }
 
 /**
