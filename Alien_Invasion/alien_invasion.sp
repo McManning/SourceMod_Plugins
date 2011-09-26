@@ -173,6 +173,7 @@ public Action:Command_TestUFO(client, args)
 		
 		GiveUFOModel(client);
 		CreateUFOHitbox(client);
+		ColorizeEquipment(client, {0,0,0,0});
 		
 		GiveUFOWeapons(client);
 		
