@@ -12,19 +12,21 @@
 */
 
 #include <tf2items_giveweapon>
+#include <sdkhooks>
 #include "common_utils"
 
 // GLOBALS
 
 #define UFO_MODEL "models/props_nucleus/mp_captop.mdl"
 #define UFO_GRAVITY (0.00001)
+#define UFO_HITBOX_Z_OFFSET (100)
 
 #define TF2ITEMS_WEAPONS_OFFSET (3000)
 
 /// @todo Convert to cvars
-#define UFO_HORIZONTAL_FORCE (100.0)
-#define UFO_VERTICAL_FORCE (50.0)
-#define UFO_BASE_HEALTH (5000)
+#define UFO_HORIZONTAL_FORCE (250.0)
+#define UFO_VERTICAL_FORCE (90.0)
+#define UFO_BASE_HEALTH (500)
 #define UFO_PRIMARY_ANGULAR_RANGE (15)
 
 /// @todo per-map settings, not hardcoded
@@ -44,6 +46,7 @@ enum UFONotification
 
 new bool:g_bIsUFO[MAXPLAYERS+1];
 new UFONotification:g_UFONotifyCode[MAXPLAYERS+1];
+new g_eUFOHitbox[MAXPLAYERS+1];
 
 new g_lastButtons[MAXPLAYERS+1];
 
@@ -73,6 +76,13 @@ public OnPluginStart()
 	
 	CreateTimer(1.0, Timer_UFOThink, INVALID_HANDLE, TIMER_REPEAT); /// @todo here or OnMapStart?
 
+	for (new i = 1; i <= MaxClients; i++) 
+	{
+        if(IsClientInGame(i))
+		{
+            SDKHook(i, SDKHook_OnTakeDamage, OnTakeDamage);
+		}
+    }
 	
 	// Construct some alien weaponry
 	
@@ -102,12 +112,17 @@ CleanUp()
 		g_bIsUFO[i] = false;
 		g_UFONotifyCode[i] = UFO_NOTIFY_NONE;
 		g_lastButtons[i] = 0;
+		g_eUFOHitbox[i] = 0;
 	}
 }
 
 public OnMapStart()
 {
 
+}
+
+public OnClientPutInServer(client) {
+    SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
 public OnClientDisconnect(client)
@@ -118,6 +133,19 @@ public OnClientDisconnect(client)
 }
 
 
+/// @todo Is this necessary now that we set m_takedamage to 0 for UFO players? I don't remember.
+public Action:OnTakeDamage(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3]) 
+{
+	// prevent UFOs from being knocked back
+    if (victim != attacker && g_bIsUFO[victim])
+	{
+        damagetype |= DMG_PREVENT_PHYSICS_FORCE;
+        return Plugin_Changed;
+    }
+	
+    return Plugin_Continue;
+}
+
 /**
  * Set specified player as a UFO entity (give weapons, model, etc) and let them test the control scheme
 */
@@ -127,10 +155,13 @@ public Action:Command_TestUFO(client, args)
 	{
 
 		RemoveUFOModel(client);
+		DestroyUFOHitbox(client);
 		
 		SetEntityGravity(client, 1.0);
 		
 		TF2_RespawnPlayer(client);
+		
+		// SetEntProp(client, Prop_Data, "m_takedamage", 2, 1);
 	}
 	else // give them UFO mode
 	{
@@ -141,12 +172,12 @@ public Action:Command_TestUFO(client, args)
 		TeleportToUFOSpawn(client);
 		
 		GiveUFOModel(client);
+		CreateUFOHitbox(client);
+		
 		GiveUFOWeapons(client);
 		
-		/// @todo figure out a way to prevent this from decaying to base health
-		// Discussion: http://forums.alliedmods.net/showthread.php?t=159021
-		SetEntProp(client, Prop_Data, "m_iMaxHealth", UFO_BASE_HEALTH);
-		SetEntityHealth(client, UFO_BASE_HEALTH);
+		// disable damage, health will be handled via the hitbox entity
+		SetEntProp(client, Prop_Data, "m_takedamage", 0, 1);
 	}
 
 	g_bIsUFO[client] = !g_bIsUFO[client];
@@ -189,6 +220,7 @@ public Action:Timer_UFOThink(Handle:timer)
 		{
 			CheckUFOHeight(i);
 			CheckUFONotifications(i);
+			SyncUFOHitbox(i);
 		}
 	}
 	
@@ -227,6 +259,102 @@ CheckUFONotifications(client)
 	
 	g_UFONotifyCode[client] = UFO_NOTIFY_NONE;
 }
+
+/**
+ * Teleports the hitbox entity used for UFO players to the proper client. 
+ * The hitbox entity will supply defenders with a larger target, and control ship health
+ */
+SyncUFOHitbox(client)
+{
+	decl Float:pos[3];
+	
+	if (g_eUFOHitbox[client] != 0)
+	{
+		GetClientEyePosition(client, pos);
+		pos[2] += UFO_HITBOX_Z_OFFSET; 
+		
+		TeleportEntity(g_eUFOHitbox[client], pos, NULL_VECTOR, NULL_VECTOR ); 
+	}
+}
+
+CreateUFOHitbox(client)
+{
+	new prop = CreateEntityByName("prop_physics_override");
+	SetEntityModel(prop, UFO_MODEL);
+	
+	DispatchKeyValue(prop, "StartDisabled", "false");
+	
+	// Tweak our collision group so it can take damage, but not collide with the pilot
+	DispatchKeyValue(prop, "Solid", "6");
+	SetEntProp(prop, Prop_Data, "m_CollisionGroup", 2); //4); COLLISION_GROUP_DEBRIS_TRIGGER
+	//SetEntProp(prop, Prop_Data, "m_usSolidFlags", 16);
+	SetEntProp(prop, Prop_Data, "m_nSolidType", 6); //SOLID_VPHYSICS (grab VPHYS from the model and use as collision map)
+	
+	DispatchSpawn(prop);
+	AcceptEntityInput(prop, "Enable");
+	AcceptEntityInput(prop, "TurnOn");
+	AcceptEntityInput(prop, "DisableMotion");
+	
+	SetEntProp(prop, Prop_Data, "m_takedamage", 2);
+	SetEntProp(prop, Prop_Data, "m_iMaxHealth", UFO_BASE_HEALTH);
+	SetEntProp(prop, Prop_Data, "m_iHealth", UFO_BASE_HEALTH);
+	
+	HookSingleEntityOutput(prop, "OnTakeDamage", EntityOutput_UFOHitPropDamage, false);
+	
+	SetEntityRenderMode(prop, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(prop, 0, 0, 0, 50); /// @todo translucent only for debugging
+
+	g_eUFOHitbox[client] = prop;
+}
+
+DestroyUFOHitbox(client)
+{
+	if (g_eUFOHitbox[client] != 0)
+	{
+		AcceptEntityInput(g_eUFOHitbox[client], "Kill");
+		g_eUFOHitbox[client] = 0;
+	}
+}
+
+OnUFOHitboxDestroy(client)
+{
+	/// @todo check if client is still valid, kill him, whatever.
+	
+	g_eUFOHitbox[client] = 0;
+}
+
+
+/**	Entity output hook. When a prop with this hook is damage, will modify the color of the prop
+	to indicate the remaining health 
+	@param caller the prop firing the output
+	@param activator the prop that forced this prop to send its output
+*/
+public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, Float:delay)
+{
+	new Float:health = float(GetEntProp(caller, Prop_Data, "m_iHealth"));
+	new Float:maxhealth = float(GetEntProp(caller, Prop_Data, "m_iMaxHealth"));
+
+	PrintToChatAll("UFO Hitbox Collision: %f/%f", health, maxhealth);
+	
+	// Energy weapons don't work, fire doesn't work, however the player can melee his own
+	// UFO ship to death!
+	
+	if (health < 1) // UFO killed
+	{
+		PrintToChatAll("UFO Hitbox destroyed");
+		// find matching UFO player
+		new bool:found = false;
+		for (new i = 1; i <= MaxClients && !found; i++) 
+		{
+			if (g_eUFOHitbox[i] == caller)
+			{
+				OnUFOHitboxDestroy(i);
+				found = true;
+			}
+		}
+	}
+
+}  
 
 /**
  * Determines if the UFO can use its weapon or not
