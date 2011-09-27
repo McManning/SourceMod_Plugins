@@ -20,7 +20,7 @@
 #define UFO_MODEL "models/props_nucleus/mp_captop.mdl"
 #define UFO_GRAVITY (0.00001)
 #define UFO_HITBOX_Z_OFFSET (100)
-
+#define UFO_THINK (0.5)
 #define TF2ITEMS_WEAPONS_OFFSET (3000)
 
 /// @todo Convert to cvars
@@ -74,7 +74,7 @@ public OnPluginStart()
 				
 	CleanUp();
 	
-	CreateTimer(1.0, Timer_UFOThink, INVALID_HANDLE, TIMER_REPEAT); /// @todo here or OnMapStart?
+	CreateTimer(UFO_THINK, Timer_UFOThink, INVALID_HANDLE, TIMER_REPEAT); /// @todo here or OnMapStart?
 
 	/*for (new i = 1; i <= MaxClients; i++) 
 	{
@@ -121,7 +121,8 @@ public OnMapStart()
 
 }
 
-public OnClientPutInServer(client) {
+public OnClientPutInServer(client)
+{
     //SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
@@ -154,9 +155,8 @@ public Action:Command_TestUFO(client, args)
 {
 	if (g_bIsUFO[client]) // disable mode
 	{
-
 		RemoveUFOModel(client);
-		DestroyUFOHitbox(client);
+		DestroyUFOHitboxEntity(client);
 		
 		SetEntityGravity(client, 1.0);
 		
@@ -174,12 +174,15 @@ public Action:Command_TestUFO(client, args)
 		
 		GiveUFOModel(client);
 		CreateUFOHitbox(client);
-		ColorizeEquipment(client, {0,0,0,0});
-		
 		GiveUFOWeapons(client);
+		
+		ColorizeEquipment(client, {0,0,0,0});
 		
 		// disable damage, health will be handled via the hitbox entity
 		SetEntProp(client, Prop_Data, "m_takedamage", 0, 1);
+		
+		PrintUFOHealthHud(client, UFO_BASE_HEALTH);
+		PrintUFOHelpHud(client);
 	}
 
 	g_bIsUFO[client] = !g_bIsUFO[client];
@@ -254,9 +257,9 @@ CheckUFONotifications(client)
 	switch (g_UFONotifyCode[client])
 	{
 		case UFO_NOTIFY_LOOKDOWN:
-			PrintCenterText(client, "You need to look down to fire that weapon!"); 
+			PrintUFONoticeHud(client, "You need to look down to fire that weapon!"); 
 		case UFO_NOTIFY_TOOLOW:
-			PrintCenterText(client, "WARNING: Too low! Pull UP!"); 
+			PrintUFONoticeHud(client, "WARNING: Too low! Pull UP!"); 
 	}
 	
 	g_UFONotifyCode[client] = UFO_NOTIFY_NONE;
@@ -340,22 +343,25 @@ public bool:OnUFOCollisionCheck(entity, collisiongroup, contentsmask, bool:origi
 	{
 		if (collisiongroup != 8 && (contentsmask & CONTENTS_TEAM2 == CONTENTS_TEAM2))
 		{
-			PrintToChatAll(".sp:319 ent:%i, group:%i, mask:%i, result:%i", entity, collisiongroup, contentsmask, originalResult);
+			//PrintToChatAll(".sp:319 ent:%i, group:%i, mask:%i, result:%i", entity, collisiongroup, contentsmask, originalResult);
 			return true;
 		}
-		else
+		else // spammed: mask: 0x201480B
 		{
+			//PrintToChatAll(".sp:319 ent:%i, group:%i, mask:%i, FALSE", entity, collisiongroup, contentsmask);
 			return false;
 		}
 	}
-	else // unhandled cases that need to be understood.
+	else if (collisiongroup != 8) // unhandled cases that need to be understood.
 	{
-		PrintToChatAll(".sp:333 group:%i, mask:%i, result:%i", collisiongroup, contentsmask, originalResult);	
+		//PrintToChatAll(".sp:333 group:%i, mask:%i, result:%i", collisiongroup, contentsmask, originalResult);	
 		return true;
 	}
+	
+	return false;
 }
 
-DestroyUFOHitbox(client)
+DestroyUFOHitboxEntity(client)
 {
 	if (g_eUFOHitbox[client] != 0)
 	{
@@ -371,6 +377,73 @@ OnUFOHitboxDestroy(client)
 	g_eUFOHitbox[client] = 0;
 }
 
+/**
+ * @param ent UFO hitbox entity linked to a pilot
+ * @return entity ID of the associated client. 0 if none are found. 
+ */
+GetUFOPilotFromHitbox(ent)
+{
+	new result = 0;
+	for (new i = 1; i <= MaxClients && result == 0; i++)
+	{
+		if (g_eUFOHitbox[i] == ent)
+		{
+			result = i;
+		}
+	}
+	
+	return result;
+}
+
+/**
+ * Updates the HUD display of the client's UFO 
+ * @param client 
+ * @param health The new health (health <= UFO_BASE_HEALTH)
+ */
+PrintUFOHealthHud(client, health)
+{
+	decl String:buffer[64];
+	Format(buffer, sizeof(buffer), "Health: %d/%d", health, UFO_BASE_HEALTH);
+	
+	SendHudMsg(client, 1, 0.01, 0.5, 
+                    255, 0, 0, 255, 
+                    255, 0, 0, 255, 
+                    0, 
+                    0.0, 1.0, 
+                    65535.0, 0.0, /// @todo proper "forever" display time 
+                    buffer
+			);
+}
+
+PrintUFOHelpHud(client)
+{
+	decl String:buffer[64];
+	Format(buffer, sizeof(buffer), "[w] Accelerate, [a] Ascend, [d] Descend");
+	
+	SendHudMsg(client, 2, 0.01, 0.45, 
+                    0, 255, 0, 255, 
+                    0, 255, 0, 255, 
+                    0, 
+                    0.0, 1.0, 
+                    120.0, 0.0, 
+                    buffer
+			);
+}
+
+/// @todo after a while, this just stops working?
+PrintUFONoticeHud(client, String:notice[])
+{
+	PrintToChat(client, notice);
+	SendHudMsg(client, 3, -1.0, -1.0, 
+                    255, 0, 0, 255, 
+                    255, 0, 0, 255, 
+                    0, 
+                    0.0, 1.0, 
+                    5.0, 0.0, 
+                    notice
+			);
+}
+
 
 /**	Entity output hook. When a prop with this hook is damage, will modify the color of the prop
 	to indicate the remaining health 
@@ -379,29 +452,27 @@ OnUFOHitboxDestroy(client)
 */
 public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, Float:delay)
 {
-	new Float:health = float(GetEntProp(caller, Prop_Data, "m_iHealth"));
-	new Float:maxhealth = float(GetEntProp(caller, Prop_Data, "m_iMaxHealth"));
+	new health = GetEntProp(caller, Prop_Data, "m_iHealth");
+	new maxhealth = GetEntProp(caller, Prop_Data, "m_iMaxHealth");
 
-	PrintToChatAll("UFO Hitbox Collision: %f/%f", health, maxhealth);
-	
 	// Energy weapons don't work, fire doesn't work, however the player can melee his own
 	// UFO ship to death!
 	
-	if (health < 1) // UFO killed
+	new pilot = GetUFOPilotFromHitbox(caller);
+	
+	if (pilot != 0)
 	{
-		PrintToChatAll("UFO Hitbox destroyed");
-		// find matching UFO player
-		new bool:found = false;
-		for (new i = 1; i <= MaxClients && !found; i++) 
+		if (health < 1) // UFO killed
 		{
-			if (g_eUFOHitbox[i] == caller)
-			{
-				OnUFOHitboxDestroy(i);
-				found = true;
-			}
+			PrintToChatAll("UFO Hitbox destroyed");
+			
+			g_eUFOHitbox[pilot] = 0;
+		}
+		else
+		{
+			PrintUFOHealthHud(pilot, health);
 		}
 	}
-
 }  
 
 /**
