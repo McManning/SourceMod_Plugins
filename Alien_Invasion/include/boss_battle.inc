@@ -1,13 +1,13 @@
 
+/**
+ *	@brief Generic Boss Battle framework
+ *	@author Chase McManning
+ */
+
 #if defined _BOSS_BATTLE_INC_
 #endinput
 #endif
 #define _BOSS_BATTLE_INC_
-
-/**
-	@brief Generic Boss Battle interface
-	@author Chase McManning
-*/
 
 /// Win/Lose conditions for bosses and defenders (interchangeable)
 enum BossCond 

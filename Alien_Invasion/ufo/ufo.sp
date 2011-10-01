@@ -1,4 +1,9 @@
 
+/**
+ *	@brief Alien Invasion boss battle event
+ *	@author Chase McManning
+ */
+
 
 ///////////////////// UFO GLOBALS /////////////////////
 
@@ -19,7 +24,7 @@
 #define UFO_PRIMARY_ANGULAR_RANGE (15)
 
 /// @todo per-map settings, not hardcoded
-#define UFO_SPAWN_POSITION {-112.0, 444.0, 3366.0}
+#define UFO_SPAWN_POSITION {-112.0, 444.0, 3000.0}
 #define UFO_SPAWN_RANGE (300.0)
 #define UFO_MIN_Z (1974.0) 
 
@@ -60,10 +65,15 @@ PreloadUFOWeapons()
 {
 	// Construct some alien weaponry
 	
+	/*
+		NOTES:
+			Property 100 is Blast Radius Decrease (0.3 is direct hit)
+	*/
+	
 	// primary
 	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET, "tf_weapon_particle_cannon", 
 							441, 0, 3, 100,
-							"107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
+							"100 ; 0.3 ; 107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
 							5000, "", true);
 	
 	// secondary
@@ -103,6 +113,7 @@ BecomeUFO(client)
 	
 	// disable damage, health will be handled via the hitbox entity
 	SetEntProp(client, Prop_Data, "m_takedamage", 0, 1);
+	SetEntProp(client, Prop_Data, "m_CollisionGroup", 0);
 	
 	PrintUFOHealthHud(client, UFO_BASE_HEALTH, UFO_BASE_HEALTH);
 	PrintUFOHelpHud(client);
@@ -213,22 +224,18 @@ DestroyUFO(client)
 	SetEntityGravity(client, 1.0);
 	
 	g_bIsUFO[client] = false;
-	
+
 	TF2_RespawnPlayer(client);
 	
 	// SetEntProp(client, Prop_Data, "m_takedamage", 2, 1);
 	
 	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
-	
 
-	// check if there's any surviving UFO, etc. 
-	
-	/*if (CountRemainingUFO() < 1)
+	// Check if all UFOs have been destroyed
+	if (CountRemainingUFO() < 1)
 	{
-		// All ufo destroyed, do something special
-		DefendersWin();
+		ExecuteForward_OnBossLose(client, BossCond_NoneRemain);
 	}
-	*/
 }
 
 DestroyUFOHitboxEntity(client)
@@ -423,7 +430,7 @@ public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, F
 		if (health < 1) // UFO killed
 		{
 			g_eUFOHitbox[pilot] = 0;
-			OnUFOHitboxDestroyed(pilot);
+			DestroyUFO(pilot);
 			
 			// Activator is a player (proper) idk if rockets will do the same though
 			//PrintToChatAll("Activator");
@@ -440,36 +447,20 @@ public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, F
 	}
 }
 
-OnUFOHitboxDestroyed(client)
-{
-	/// @todo check if client is still valid, kill him, whatever.
-	DestroyUFO(client);	
-}
-
-/// @todo move this
-DefendersWin()
-{
-	PrintToChatAll("DEFENDERS WIN! ");
-}
-
-CountRemainingUFO()
-{
-	new count = 0;
-	for (new i = 1; i <= MaxClients; ++i)
-	{
-		if (g_bIsUFO[i])
-			count += 1;
-	}
-	
-	return count;
-}
-
 OnUFODisconnect(client)
 {
 	g_bIsUFO[client] = false;
 	SetUFONotification(client, UFO_NOTIFY_NONE);
 	g_lastButtons[client] = 0;
 	DestroyUFOHitboxEntity(client);
+	
+	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
+
+	// Check if all UFOs have been destroyed
+	if (CountRemainingUFO() < 1)
+	{
+		ExecuteForward_OnBossLose(client, BossCond_NoneRemain);
+	}
 }
 
 public Action:Event_UFODeath(Handle:event, const String:name[], bool:dontBroadcast)
@@ -585,6 +576,18 @@ GetUFOPilotFromHitbox(ent)
 	}
 	
 	return result;
+}
+
+CountRemainingUFO()
+{
+	new count = 0;
+	for (new i = 1; i <= MaxClients; ++i)
+	{
+		if (g_bIsUFO[i])
+			count += 1;
+	}
+	
+	return count;
 }
 
 

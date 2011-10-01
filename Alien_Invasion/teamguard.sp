@@ -1,4 +1,9 @@
 
+/**
+ *	@brief Generic team management and locking framework
+ *	@author Chase McManning
+ */
+
 #include <sourcemod>
 #include <sdktools>
 #include <tf2>
@@ -63,7 +68,7 @@ TeamGuard_GetClosedTeam()
 		RegAdminCmd("sm_unit1_teamguard", Command_UnitTest, ADMFLAG_ROOT);
 		RegAdminCmd("sm_unit2_teamguard", Command_UnitTest2, ADMFLAG_ROOT);
 		
-		HookEvent("player_spawn", TeamGuard_HookPlayerSpawn);  
+		HookEvent("player_spawn", TeamGuard_HookPlayerSpawn, EventHookMode_Pre);  
 		
 		AddCommandListener(TeamGuard_HookJoinTeam, "jointeam");
 		//AddCommandListener(TeamGuard_HookJoinClass, "joinclass");
