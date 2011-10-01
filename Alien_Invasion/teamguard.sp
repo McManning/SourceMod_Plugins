@@ -4,31 +4,29 @@
  *	@author Chase McManning
  */
 
-#include <sourcemod>
-#include <sdktools>
-#include <tf2>
-#include <tf2_stocks>
-
-#pragma semicolon 1
-
 #define UNIT_TEST
 
+#if defined UNIT_TEST
+	#include <sourcemod>
+	#include <sdktools>
+	#include <tf2>
+	#include <tf2_stocks>
+	#pragma semicolon 1
+#endif
+
+//
 // Team store, manage, and recover
 
 // also class locking!
 
-#define RED_TEAM (2)
-#define BLU_TEAM (3)
-#define SPEC_TEAM (1)
-
-new g_originalTeam[MAXPLAYERS+1];
+new TFTeam:g_originalTeam[MAXPLAYERS+1];
 new TFClassType:g_originalClass[MAXPLAYERS+1];
 
 new g_originalREDCount;
 new g_originalBLUCount;
 
 new g_bAllowedToClosedTeam[MAXPLAYERS+1];
-new g_openJoinTeam;
+new TFTeam:g_openJoinTeam;
 
 new g_bTeamGuardEnabled = false;
 
@@ -36,20 +34,6 @@ new Handle:g_cvarAutoTeamBalance = INVALID_HANDLE;
 new g_oldAutoTeamBalanceValue = 1;
 
 new TFClassType:g_forceClass[2];
-
-
-TeamGuard_GetOpenTeam()
-{
-	return g_openJoinTeam;
-}
-
-TeamGuard_GetClosedTeam()
-{
-	if (g_openJoinTeam == RED_TEAM)
-		return BLU_TEAM;
-
-	return RED_TEAM;
-}
 
 #if defined UNIT_TEST
 
@@ -77,7 +61,7 @@ TeamGuard_GetClosedTeam()
 	public Action:Command_UnitTest(client, args)
 	{
 		PrintToChatAll("..... Storing Teams");
-		TeamGuard_Enable(RED_TEAM);
+		TeamGuard_Enable(TFTeam_Red);
 
 		SetToClosedTeam(1);
 		
@@ -121,7 +105,7 @@ TeamGuard_GetClosedTeam()
 		PrintToChatAll("..... Juggling Teams");
 	
 		// swap open team, fill locked BLU
-		TeamGuard_SetOpenJoinTeam(BLU_TEAM);
+		TeamGuard_SetOpenJoinTeam(TFTeam_Blue);
 		SetToClosedTeam(4);
 	
 		PrintToChatAll("..... Restoration in 10 seconds");
@@ -134,13 +118,13 @@ TeamGuard_GetClosedTeam()
 	{
 		PrintToChatAll("..... Storing Teams and forcing RED to Heavy");
 		
-		TeamGuard_Enable(RED_TEAM);
-		TeamGuard_SetForcedClass(BLU_TEAM, TFClass_Heavy);
-		TeamGuard_SetForcedClass(RED_TEAM, TFClass_Pyro);
+		TeamGuard_Enable(TFTeam_Red);
+		TeamGuard_SetForcedClass(TFTeam_Blue, TFClass_Heavy);
+		TeamGuard_SetForcedClass(TFTeam_Red, TFClass_Pyro);
 		
 		SetToClosedTeam(5); // force two players to BLU
 		
-		PrintToChatAll("..... Restoration in 5 seconds");
+		PrintToChatAll("..... Restoration in 50 seconds");
 		CreateTimer(50.0, Timer_RestoreTeams, INVALID_HANDLE);
 		
 		return Plugin_Handled;
@@ -156,10 +140,23 @@ TeamGuard_GetClosedTeam()
 	
 #endif
 
+TFTeam:TeamGuard_GetOpenTeam()
+{
+	return g_openJoinTeam;
+}
+
+TFTeam:TeamGuard_GetClosedTeam()
+{
+	if (g_openJoinTeam == TFTeam_Red)
+		return TFTeam_Blue;
+
+	return TFTeam_Red;
+}
+
 /**
  * Wrapper over ChangeClientTeam to flag players who are manually moved to the closed team
  */
-TeamGuard_MoveClientToTeam(client, team)
+TeamGuard_MoveClientToTeam(client, TFTeam:team)
 {
 	if (IsClientPlaying(client))
 	{
@@ -168,8 +165,8 @@ TeamGuard_MoveClientToTeam(client, team)
 		PrintToChatAll("Moving %L to %d", client, team);
 #endif
 
-		if ((team == RED_TEAM && g_openJoinTeam == BLU_TEAM) 
-			|| (team == BLU_TEAM && g_openJoinTeam == RED_TEAM))
+		if ((team == TFTeam_Red && g_openJoinTeam == TFTeam_Blue) 
+			|| (team == TFTeam_Blue && g_openJoinTeam == TFTeam_Red))
 		{
 			g_bAllowedToClosedTeam[client] = true;
 		}
@@ -183,31 +180,31 @@ TeamGuard_MoveClientToTeam(client, team)
  */
 TeamGuard_StoreTeams()
 {
-	new team;
+	new TFTeam:team;
 	
 	g_originalREDCount = 0;
 	g_originalBLUCount = 0;
 	
 	for (new i = 1; i <= MaxClients; ++i)
 	{
-		if (!IsClientInGame(i) || GetClientTeam(i) < 2)
+		if (!IsClientInGame(i) || GetClientTeam(i) < _:TFTeam_Red)
 		{
-			g_originalTeam[i] = -1;
+			g_originalTeam[i] = TFTeam_Unassigned;
 		}
 		else
 		{
-			team = GetClientTeam(i);					
+			team = TFTeam:GetClientTeam(i);		
 			g_originalTeam[i] = team;
 			
 			switch (team)
 			{
-				case RED_TEAM:
+				case TFTeam_Red:
 					g_originalREDCount += 1;
-				case BLU_TEAM:
+				case TFTeam_Blue:
 					g_originalBLUCount += 1;
 			}
 			
-			if (team == RED_TEAM || team == BLU_TEAM)
+			if (team == TFTeam_Red || team == TFTeam_Blue)
 				g_originalClass[i] = TF2_GetPlayerClass(i);
 			else
 				g_originalClass[i] = TFClassType:TFClass_Soldier; // spec, pick generic class
@@ -232,11 +229,11 @@ TeamGuard_RestoreTeams()
 	for (new i = 1; i <= MaxClients; ++i)
 	{
 		// don't force specs/non-ingamers to rejoin old teams
-		if (!IsClientInGame(i) || GetClientTeam(i) < 2)
+		if (!IsClientInGame(i) || GetClientTeam(i) < _:TFTeam_Red)
 			continue;
 
 		// if we haven't been assigned a team/class yet, do so
-		if (g_originalTeam[i] == -1)
+		if (g_originalTeam[i] == TFTeam_Unassigned)
 		{
 #if defined UNIT_TEST
 		PrintToChatAll("%L getting auto assigned", i);
@@ -258,7 +255,7 @@ TeamGuard_RestoreTeams()
 	}
 }
 
-TeamGuard_SetOpenJoinTeam(team)
+TeamGuard_SetOpenJoinTeam(TFTeam:team)
 {
 	g_openJoinTeam = team;
 	
@@ -266,7 +263,7 @@ TeamGuard_SetOpenJoinTeam(team)
 		g_bAllowedToClosedTeam[i] = false;
 }
 
-TeamGuard_Enable(openTeam)
+TeamGuard_Enable(TFTeam:openTeam)
 {
 	g_cvarAutoTeamBalance = FindConVar("mp_autoteambalance");
 
@@ -301,13 +298,13 @@ public TeamGuard_OnClientDisconnect(client)
 	{
 		switch (g_originalTeam[client])
 		{
-			case RED_TEAM:
+			case TFTeam_Red:
 				g_originalREDCount -= 1;
-			case BLU_TEAM:
+			case TFTeam_Blue:
 				g_originalBLUCount -= 1;
 		}
 		
-		g_originalTeam[client] = -1;
+		g_originalTeam[client] = TFTeam_Unassigned;
 		g_bAllowedToClosedTeam[client] = false;
 	}
 }
@@ -319,12 +316,12 @@ AutoAssignStoredTeam(client)
 {
 	if (g_originalREDCount < g_originalBLUCount)
 	{
-		g_originalTeam[client] = RED_TEAM;
+		g_originalTeam[client] = TFTeam_Red;
 		g_originalREDCount += 1;
 	}
 	else
 	{	
-		g_originalTeam[client] = BLU_TEAM;
+		g_originalTeam[client] = TFTeam_Blue;
 		g_originalBLUCount += 1;
 	}
 
@@ -352,7 +349,7 @@ public Action:TeamGuard_HookJoinTeam(client, const String:command[], argc)
 	
 		GetCmdArg(1, team, sizeof(team));
 
-		if (g_openJoinTeam == RED_TEAM)
+		if (g_openJoinTeam == TFTeam_Red)
 		{
 			openTeam = "red";
 			closedTeam = "blue";
@@ -368,7 +365,7 @@ public Action:TeamGuard_HookJoinTeam(client, const String:command[], argc)
 		// if they try to join the closed team (or pick random), force them into open 
 		if (StrEqual(team, closedTeam, false) || StrEqual(team, "auto", false))
 		{
-			ChangeClientTeam(client, g_openJoinTeam);
+			ChangeClientTeam(client, _:g_openJoinTeam);
 			ShowVGUIPanel(client, openVGUI);
 			return Plugin_Handled;
 		}
@@ -400,7 +397,7 @@ public Action:TeamGuard_HookJoinClass(client, const String:command[], argc)
 	{
 		GetCmdArg(1, classname, sizeof(classname));
 		
-		new team = GetClientTeam(client);
+		new TFTeam:team = TFTeam:GetClientTeam(client);
 		
 		if (TeamGuard_GetForcedClass(team) != TFClass_Unknown)
 			//&& StrEqualTFClassType(classname, g_forceClass[team-2]))
@@ -419,7 +416,7 @@ public Action:TeamGuard_HookPlayerSpawn(Handle:event, const String:name[], bool:
 	if (g_bTeamGuardEnabled)
 	{
 		new client = GetClientOfUserId(GetEventInt(event, "userid"));
-		new team = GetClientTeam(client);
+		new TFTeam:team = TFTeam:GetClientTeam(client);
 		
 		new TFClassType:classtype = TeamGuard_GetForcedClass(team);
 	
@@ -441,14 +438,14 @@ TeamGuard_ResetForcedClasses()
 	g_forceClass[0] = g_forceClass[1] = TFClass_Unknown;
 }
 
-TeamGuard_SetForcedClass(team, TFClassType:classtype)
+TeamGuard_SetForcedClass(TFTeam:team, TFClassType:classtype)
 {
-	g_forceClass[team-2] = classtype;
+	g_forceClass[_:team-2] = classtype;
 }
 
-TFClassType:TeamGuard_GetForcedClass(team)
+TFClassType:TeamGuard_GetForcedClass(TFTeam:team)
 {
-	return g_forceClass[team-2];
+	return g_forceClass[_:team-2];
 }
 
 stock bool:IsClientPlaying(client)
@@ -475,7 +472,7 @@ stock bool:StrEqualTFClassType(const String:classname[], TFClassType:classtype)
 }
 
 // @author dirtyminuth
-stock RespawnClient(client, team, TFClassType:classtype = TFClass_Unknown)
+stock RespawnClient(client, TFTeam:team, TFClassType:classtype = TFClass_Unknown)
 {
 	if (IsClientInGame(client) && GetClientTeam(client) > 1)
 	{
@@ -486,16 +483,16 @@ stock RespawnClient(client, team, TFClassType:classtype = TFClass_Unknown)
 			classtype = TF2_GetPlayerClass(client);
 	
 		// if the target team has class restrictions in place, change their target class
-		if (g_bTeamGuardEnabled && g_forceClass[team-2] != TFClass_Unknown)
+		if (g_bTeamGuardEnabled && TeamGuard_GetForcedClass(team) != TFClass_Unknown)
 		{
-			classtype = g_forceClass[team-2];
+			classtype = TeamGuard_GetForcedClass(team);
 		}
 
 		// Use of m_lifeState here prevents:
 		// 1. "[Player] Suicided" messages.
 		// 2. Adding a death to player stats.
 		SetEntProp(client, Prop_Send, "m_lifeState", 2); 
-		ChangeClientTeam(client, team);
+		ChangeClientTeam(client, _:team);
 		TF2_SetPlayerClass(client, classtype, false, true); 
 		SetEntProp(client, Prop_Send, "m_lifeState", 0);      
 		TF2_RespawnPlayer(client);      
