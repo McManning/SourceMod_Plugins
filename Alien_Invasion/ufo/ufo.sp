@@ -3,6 +3,8 @@
 ///////////////////// UFO GLOBALS /////////////////////
 
 #include "ufo/hud.sp"
+#include "include/boss_battle"
+#include "include/explode"
 
 #define UFO_MODEL "models/props_nucleus/mp_captop.mdl"
 #define UFO_GRAVITY (0.00001)
@@ -31,7 +33,14 @@ new g_lastButtons[MAXPLAYERS+1];
 
 InitializeUFOs()
 {
+	// Initialize boss framework forwards
+	CreateBossForwards();
+
 	PreloadUFOWeapons();
+	
+	PreloadExplodeEffect();
+	
+	HookEvent("player_death", Event_UFODeath);
 	
 	// set starting value for all globals
 	for (new i = 0; i < MAXPLAYERS+1; ++i)
@@ -99,6 +108,8 @@ BecomeUFO(client)
 	PrintUFOHelpHud(client);
 	
 	g_bIsUFO[client] = true;
+	
+	ExecuteForward_OnBossSpawn(client);
 }
 
 /**
@@ -180,6 +191,8 @@ GiveUFOModel(client)
  */
 GiveUFOWeapons(client)
 {
+	TF2_RemoveAllWeapons(client);
+	
 	for (new i = 2; i > -1; --i)
 		TF2Items_GiveWeapon(client, TF2ITEMS_WEAPONS_OFFSET + i);
 }
@@ -190,13 +203,32 @@ GiveUFOWeapons(client)
 
 DestroyUFO(client)
 {
+	/// @todo check for valid client!
+
+	ExplodeEffectOnClient(client);
+
 	DestroyUFOHitboxEntity(client);
-	
+
 	RemoveUFOModel(client);
 	SetEntityGravity(client, 1.0);
+	
+	g_bIsUFO[client] = false;
+	
 	TF2_RespawnPlayer(client);
 	
 	// SetEntProp(client, Prop_Data, "m_takedamage", 2, 1);
+	
+	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
+	
+
+	// check if there's any surviving UFO, etc. 
+	
+	/*if (CountRemainingUFO() < 1)
+	{
+		// All ufo destroyed, do something special
+		DefendersWin();
+	}
+	*/
 }
 
 DestroyUFOHitboxEntity(client)
@@ -392,6 +424,14 @@ public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, F
 		{
 			g_eUFOHitbox[pilot] = 0;
 			OnUFOHitboxDestroyed(pilot);
+			
+			// Activator is a player (proper) idk if rockets will do the same though
+			//PrintToChatAll("Activator");
+			//PrintToChatAll(">> %L", activator);
+			
+			/* @todo something involving the activator player. Or store damage stats on everyone
+				and eventually report the MVPs
+			*/
 		}
 		else // update the pilot with statistics
 		{
@@ -403,15 +443,25 @@ public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, F
 OnUFOHitboxDestroyed(client)
 {
 	/// @todo check if client is still valid, kill him, whatever.
+	DestroyUFO(client);	
+}
+
+/// @todo move this
+DefendersWin()
+{
+	PrintToChatAll("DEFENDERS WIN! ");
+}
+
+CountRemainingUFO()
+{
+	new count = 0;
+	for (new i = 1; i <= MaxClients; ++i)
+	{
+		if (g_bIsUFO[i])
+			count += 1;
+	}
 	
-	PrintToChatAll("UFO DESTROYED");
-	
-	// big boom and whatnot here
-	// check if there's any surviving UFO, etc. 
-	
-	DestroyUFO(client);
-		
-	
+	return count;
 }
 
 OnUFODisconnect(client)
@@ -420,6 +470,18 @@ OnUFODisconnect(client)
 	SetUFONotification(client, UFO_NOTIFY_NONE);
 	g_lastButtons[client] = 0;
 	DestroyUFOHitboxEntity(client);
+}
+
+public Action:Event_UFODeath(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	if (client > 0 && client <= MaxClients && g_bIsUFO[client])
+	{
+		DestroyUFO(client);
+	}
+
+	return Plugin_Continue;
 }
 
 
@@ -461,7 +523,11 @@ CheckUFOHeight(client)
 	if (pos[2] < UFO_MIN_Z)
 	{
 		SetUFONotification(client, UFO_NOTIFY_TOOLOW);
-		TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, { 0.0, 0.0, UFO_VERTICAL_FORCE } ); 
+		
+		pos[0] = 0.0;
+		pos[1] = 0.0;
+		pos[2] = UFO_VERTICAL_FORCE;
+		TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, pos ); 
 	}
 }
 
@@ -493,7 +559,7 @@ public Action:Command_TestUFO(client, args)
 {
 	if (g_bIsUFO[client]) // disable mode
 	{
-		
+		DestroyUFO(client);
 	}
 	else // give them UFO mode
 	{

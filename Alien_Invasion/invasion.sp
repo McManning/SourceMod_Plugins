@@ -1,7 +1,7 @@
 
 #include <tf2items_giveweapon>
 #include <sdkhooks>
-#include "common_utils"
+#include "include/common_utils"
 
 #include "ufo/ufo.sp"
 
@@ -35,5 +35,13 @@ public OnClientDisconnect(client)
 	OnUFODisconnect(client);
 }
 
+public OnBossSpawn(client)
+{
+	PrintToChatAll("BOSS SPAWN (%L)", client);
+}
 
+public OnBossDeath(client, BossDeath:reason)
+{
+	PrintToChatAll("BOSS DEATH (%L Reason: %d)", client, reason);
+}
 
