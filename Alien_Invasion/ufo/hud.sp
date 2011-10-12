@@ -80,3 +80,18 @@ PrintUFONoticeHud(client, String:notice[])
 			);
 }
 
+PrintInvasionCountdown(client, Float:timeleft)
+{
+	decl String:buffer[64];
+	Format(buffer, sizeof(buffer), "UFO Conquest In: %.0f", timeleft);
+	
+	SendHudMsg(client, 4, 0.8, 0.03, 
+                    255, 0, 0, 255, 
+                    255, 0, 0, 255, 
+                    0, 
+                    0.0, 1.0, 
+                    2.0, 0.0,
+                    buffer
+			);
+}
+

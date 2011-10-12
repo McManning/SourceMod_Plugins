@@ -29,11 +29,30 @@ enum BossDeath
 	BossDeath_Idle /**< Boss player went idle too long */
 };
 
+/// What type of boss battle is being ran 
+enum BossType
+{
+	BossType_None = 0,
+	BossType_AlienInvasion
+};
 
 new Handle:g_fwdOnBossSpawn = INVALID_HANDLE;
 new Handle:g_fwdOnBossDeath = INVALID_HANDLE;
 new Handle:g_fwdOnBossWin = INVALID_HANDLE;
 new Handle:g_fwdOnBossLose = INVALID_HANDLE;
+
+new BossType:g_activeBossType = BossType_None;
+
+
+public SetActiveBossType(BossType:type)
+{
+	g_activeBossType = type;
+}
+
+public BossType:GetActiveBossType()
+{
+	return g_activeBossType;
+}
 
 public CreateBossForwards()
 {

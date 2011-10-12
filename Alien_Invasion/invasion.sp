@@ -28,7 +28,9 @@ public Plugin:myinfo =
 
 new Handle:g_hInvadersWinTimer = INVALID_HANDLE;
 new Handle:g_hMinuteRemaining = INVALID_HANDLE;
+new Handle:g_hCountdownTimer = INVALID_HANDLE;
 
+new Float:g_remainingInvasionTime = 0.0;
 
 ///////////////////// EVENTS /////////////////////
 
@@ -40,12 +42,20 @@ public OnPluginStart()
 	RegAdminCmd("sm_invasion", Command_TestInvasion, ADMFLAG_ROOT);
 	RegAdminCmd("sm_killinvasion", Command_KillInvasion, ADMFLAG_ROOT);
 	
+	RegAdminCmd("sm_invasion2", Command_TestInvasion2, ADMFLAG_ROOT);
+	
 	InitializeUFOs();
 }
 
 public Action:Command_TestInvasion(client, args)
 {
 	SetupControlledInvasion(client);
+	return Plugin_Handled;
+}
+
+public Action:Command_TestInvasion2(client, args)
+{
+	SetupInvasion();
 	return Plugin_Handled;
 }
 
@@ -143,13 +153,20 @@ StartInvasion(count)
 	
 	/// @todo spawn secondary objectives
 	
-	g_hInvadersWinTimer = CreateTimer(SECONDS_PER_UFO * count, Timer_InvadersWin, 
+	g_remainingInvasionTime = (SECONDS_PER_UFO * count);
+	
+	g_hInvadersWinTimer = CreateTimer(g_remainingInvasionTime, Timer_InvadersWin, 
 									INVALID_HANDLE, 
 									TIMER_FLAG_NO_MAPCHANGE); 
 									
-	g_hMinuteRemaining = CreateTimer((SECONDS_PER_UFO * count) - 60.0, Timer_MinuteRemaining, 
+	g_hMinuteRemaining = CreateTimer(g_remainingInvasionTime - 60.0, Timer_MinuteRemaining, 
 									INVALID_HANDLE, 
 									TIMER_FLAG_NO_MAPCHANGE); 
+									
+	g_hCountdownTimer = CreateTimer(1.0, Timer_Countdown,
+									INVALID_HANDLE, 
+									TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT); 
+			
 }
 
 /**
@@ -158,14 +175,37 @@ StartInvasion(count)
  */
 GetSuggestedUFOCount()
 {
-	new Float:players = 0;
+	new players = 0;
 	for (new i = 1; i <= MaxClients; ++i)
 	{
 		if (IsClientConnected(i) && IsClientInGame(i))
 			players += 1;
 	}
 	
-	return RoundToFloor(players * 0.2); 
+	return (players / 5); 
+}
+
+/**
+ * Defenders couldn't defeat the UFOs in time, start an invasion
+ */
+public Action:Timer_Countdown(Handle:timer)
+{
+	if (g_hCountdownTimer == timer)
+	{
+		g_remainingInvasionTime -= 1.0;
+	
+		for (new i = 1; i <= MaxClients; ++i)
+		{
+			if (IsClientConnected(i) && IsClientInGame(i))
+			{
+				PrintInvasionCountdown(i, g_remainingInvasionTime);
+			}
+		}
+		
+		return Plugin_Continue;
+	}
+	
+	return Plugin_Stop;
 }
 
 /**
@@ -177,11 +217,8 @@ public Action:Timer_InvadersWin(Handle:timer)
 	{
 		g_hInvadersWinTimer = INVALID_HANDLE;
 
-		/// @todo somehow trigger an alien win!
-		
-		
-		// Trigger OnBossWin(BossCond:reason)
-		// reset everything
+		// Bosses win!
+		ExecuteForward_OnBossWin(BossCond_TimeUp);
 	}
 	
 	return Plugin_Continue;
@@ -322,6 +359,12 @@ CleanWreckage()
 		g_hMinuteRemaining = INVALID_HANDLE;
 	}
 	
+	if (g_hCountdownTimer != INVALID_HANDLE)
+	{	
+		CloseHandle(g_hCountdownTimer);
+		g_hCountdownTimer = INVALID_HANDLE;
+	}
+
 	// clean UFO players
 	ResetAllUFOs();
 	
