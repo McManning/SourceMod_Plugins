@@ -23,6 +23,7 @@ enum BossDeath
 {
 	BossDeath_Unknown = 0,
 	BossDeath_Slayed,
+	BossDeath_Disconnect, /**< Boss player disconnected during the match */
 	
 	/// @todo Necessary? Let individual plugins handle this on case-by-case. 
 	BossDeath_Idle /**< Boss player went idle too long */
