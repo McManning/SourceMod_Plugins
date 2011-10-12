@@ -4,7 +4,7 @@
  *	@author Chase McManning
  */
 
-#define UNIT_TEST
+//#define UNIT_TEST
 
 #if defined UNIT_TEST
 	#include <sourcemod>

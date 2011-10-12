@@ -73,7 +73,7 @@ PreloadUFOWeapons()
 	// primary
 	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET, "tf_weapon_particle_cannon", 
 							441, 0, 3, 100,
-							"100 ; 0.3 ; 107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
+							"107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
 							5000, "", true);
 	
 	// secondary
@@ -234,7 +234,7 @@ DestroyUFO(client)
 	// Check if all UFOs have been destroyed
 	if (CountRemainingUFO() < 1)
 	{
-		ExecuteForward_OnBossLose(client, BossCond_NoneRemain);
+		ExecuteForward_OnBossLose(BossCond_NoneRemain);
 	}
 }
 
@@ -459,7 +459,7 @@ OnUFODisconnect(client)
 	// Check if all UFOs have been destroyed
 	if (CountRemainingUFO() < 1)
 	{
-		ExecuteForward_OnBossLose(client, BossCond_NoneRemain);
+		ExecuteForward_OnBossLose(BossCond_NoneRemain);
 	}
 }
 

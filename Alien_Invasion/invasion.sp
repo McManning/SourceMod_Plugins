@@ -37,7 +37,15 @@ public OnPluginStart()
 {
 	RegAdminCmd("sm_testufo", Command_TestUFO, ADMFLAG_ROOT);
 	
+	RegAdminCmd("sm_invasion", Command_TestInvasion, ADMFLAG_ROOT);
+	
 	InitializeUFOs();
+}
+
+public Action:Command_TestInvasion(client, args)
+{
+	SetupControlledInvasion(client);
+	return Plugin_Handled;
 }
 
 
@@ -84,7 +92,7 @@ public OnBossWin(BossCond:reason)
  * force players to UFO, and begin BOSS BATTLE!
  * @param count number of UFOs to invade
  */
-StartInvasion()
+SetupInvasion()
 {
 	new count = GetSuggestedUFOCount();
 	
@@ -96,18 +104,38 @@ StartInvasion()
 
 		ReorganizeTeams(count);
 		
-		SendInvasionAlert();
-		
-		/// @todo spawn secondary objectives
-		
-		g_hInvadersWinTimer = CreateTimer(SECONDS_PER_UFO * count, Timer_InvadersWin, 
-										INVALID_HANDLE, 
-										TIMER_FLAG_NO_MAPCHANGE); 
-										
-		g_hMinuteRemaining = CreateTimer((SECONDS_PER_UFO * count) - 60.0, Timer_MinuteRemaining, 
-										INVALID_HANDLE, 
-										TIMER_FLAG_NO_MAPCHANGE); 
+		StartInvasion();
 	}
+}
+
+/**
+ * Start an invasion, specifying the UFO client, for debugging purposes
+ */
+SetupControlledInvasion(client)
+{
+	TeamGuard_Enable(RED_TEAM);
+	
+	ReorganizeTeamsForSinglePilot(client);
+	
+	StartInvasion();
+}
+
+/**
+ * Will send proper messages to everyone and start the invasion timers 
+ */
+StartInvasion()
+{
+	SendInvasionAlert();
+	
+	/// @todo spawn secondary objectives
+	
+	g_hInvadersWinTimer = CreateTimer(SECONDS_PER_UFO * count, Timer_InvadersWin, 
+									INVALID_HANDLE, 
+									TIMER_FLAG_NO_MAPCHANGE); 
+									
+	g_hMinuteRemaining = CreateTimer((SECONDS_PER_UFO * count) - 60.0, Timer_MinuteRemaining, 
+									INVALID_HANDLE, 
+									TIMER_FLAG_NO_MAPCHANGE); 
 }
 
 /**
@@ -154,6 +182,25 @@ public Action:Timer_MinuteRemaining(Handle:timer)
 	}
 	
 	return Plugin_Continue;
+}
+
+
+/**
+ * The specified client will become BLU, while the rest are on RED
+ */
+ReorganizeTeamsForSinglePilot(client)
+{
+	for (new i = 1; i <= MaxClients; ++i)
+	{
+		if (i == client)
+		{
+			TeamGuard_MoveClientToTeam(i, TeamGuard_GetClosedTeam());
+		} 
+		else
+		{
+			TeamGuard_MoveClientToTeam(i, TeamGuard_GetOpenTeam());
+		}
+	}
 }
 
 /**
