@@ -242,11 +242,22 @@ DestroyUFO(client)
 	ExplodeEffectOnClient(client);
 	RemoveUFO(client);
 	
+	// force them to defend earth
+	MoveUFOToDefenders(client);
+	
 	// Check if this was the last UFO
-	if (CountRemainingUFO() < 2)
+	if (CountRemainingUFO() < 1)
 	{
 		ExecuteForward_OnBossLose(BossCond_NoneRemain);
 	}
+}
+
+/**
+ * Moves a recently destroyed UFO player to the defending team
+ */
+MoveUFOToDefenders(client)
+{
+	TeamGuard_MoveClientToTeam(client, TFTeam:TFTeam_Red);
 }
 
 DestroyUFOHitboxEntity(client)
@@ -462,19 +473,19 @@ OnUFODisconnect(client)
 {
 	if (g_bIsUFO[client])
 	{
-		ExecuteForward_OnBossDeath(client, BossDeath_Disconnect);
-
-		// Check if all UFOs have been destroyed
-		if (CountRemainingUFO() < 2)
-		{
-			ExecuteForward_OnBossLose(BossCond_NoneRemain);
-		}
-		
 		SetUFONotification(client, UFO_NOTIFY_NONE);
 	
 		DestroyUFOHitboxEntity(client);
 		g_bIsUFO[client] = false;
 		g_lastButtons[client] = 0;
+	
+		ExecuteForward_OnBossDeath(client, BossDeath_Disconnect);
+
+		// Check if all UFOs have been destroyed
+		if (CountRemainingUFO() < 1)
+		{
+			ExecuteForward_OnBossLose(BossCond_NoneRemain);
+		}
 	}
 }
 
@@ -506,7 +517,7 @@ public Action:Timer_UFOThink(Handle:timer)
 {
 	for (new i = 1; i <= MaxClients; ++i)
 	{
-		if (!IsClientInGame(i) || IsFakeClient(i))
+		if (!IsClientInGame(i))
 		{
 			continue;
 		}

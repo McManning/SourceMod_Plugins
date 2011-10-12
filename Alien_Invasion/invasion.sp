@@ -278,17 +278,17 @@ ReorganizeTeams(pilots)
 			// give them a random chance of being a UFO
 			if (c < pilots && GetRandomInt(0, 3) == 0)
 			{
-				assignment[i] = 1;
+				assignment[i] = 2; // ufo
 				c += 1;
 			}
 			else
 			{
-				assignment[i] = 2; 
+				assignment[i] = 1; // defender
 			}
 		}
 		else
 		{
-			assignment[i] = 0;
+			assignment[i] = 0; // not a client
 		}
 	}
 	
@@ -296,7 +296,7 @@ ReorganizeTeams(pilots)
 	// UFO slots, then first clients encountered to be defenders will be UFO
 	for (new i = 1; i <= MaxClients; ++i)
 	{
-		if (assignment[i] == 1)
+		if (assignment[i] == 1) // defender
 		{
 			// if we still need UFO, and they're defender, turn to UFO
 			if (c < pilots)
@@ -310,7 +310,7 @@ ReorganizeTeams(pilots)
 				TeamGuard_MoveClientToTeam(i, TeamGuard_GetOpenTeam());
 			}
 		}
-		else if (assignment[i] == 2)
+		else if (assignment[i] == 2) // UFO
 		{
 			// ufo
 			TeamGuard_MoveClientToTeam(i, TeamGuard_GetClosedTeam());
