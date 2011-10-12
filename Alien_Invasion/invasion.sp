@@ -43,25 +43,56 @@ public OnPluginStart()
 	RegAdminCmd("sm_killinvasion", Command_KillInvasion, ADMFLAG_ROOT);
 	
 	RegAdminCmd("sm_invasion2", Command_TestInvasion2, ADMFLAG_ROOT);
+	RegAdminCmd("sm_invasion3", Command_TestInvasion3, ADMFLAG_ROOT);
+	
 	
 	InitializeUFOs();
 }
 
+/**
+ * Start an invasion where the issuer of this command is the only UFO
+ */
 public Action:Command_TestInvasion(client, args)
 {
 	SetupControlledInvasion(client);
 	return Plugin_Handled;
 }
 
+/**
+ * Start a standard invasion
+ */
 public Action:Command_TestInvasion2(client, args)
 {
 	SetupInvasion();
 	return Plugin_Handled;
 }
 
+/**
+ * Start an invasion with a manual UFO count
+ */
+public Action:Command_TestInvasion3(client, args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_invasion3 <count>");
+		return Plugin_Handled;
+	}
+
+	decl String:arg[3];
+	GetCmdArg(1, arg, sizeof(arg));
+	
+	new count = StringToInt(arg);
+
+	TeamGuard_Enable(TFTeam:TFTeam_Red);
+	ReorganizeTeams(count);
+	StartInvasion(count);
+		
+	return Plugin_Handled;
+}
+
 public Action:Command_KillInvasion(client, args)
 {
-	PrintToChatAll("\x05%L force killed the invasion", client);
+	PrintToChatAll("\x05%t force killed the invasion", client);
 	
 	CleanWreckage();
 	
@@ -80,32 +111,32 @@ public OnClientDisconnect(client)
 
 public OnBossSpawn(client)
 {
-	PrintToChat(client, "BOSS SPAWN (%L)", client);
+	//PrintToChat(client, "BOSS SPAWN (%L)", client);
 }
 
 public OnBossDeath(client, BossDeath:reason)
 {
-	PrintToChat(client, "BOSS DEATH (%L Reason: %d)", client, reason);
+	PrintToChatAll("\x05Invader %t has been destroyed!", client);
 }
 
 public OnBossLose(BossCond:reason)
 {
+	/// @todo not immediate cleanup, let the defenders have fun for a sec or something
+	CleanWreckage();
+	
 	/// @todo a real (appropriate) alert. Also announcer quotes
 	PrintCenterTextAll("YOU HAVE SAVED HUMANITY!");
 	PrintToChatAll("\x05The aliens have ran back home to Gallifrey. You've done it. You've saved mankind (for now)");
-	
-	/// @todo not immediate cleanup, let the defenders have fun for a sec or something
-	CleanWreckage();
 }
 
 public OnBossWin(BossCond:reason)
 {
+	/// @todo not immediate cleanup, let the bosses have fun for a sec or something
+	CleanWreckage();
+
 	/// @todo a real (appropriate) alert. Also announcer quotes
 	PrintCenterTextAll("YOU HAVE ALL DOOMED HUMANITY!");
 	PrintToChatAll("\x05THE ALIENS HAVE WON. OUR CITIES ARE BURNING. HUMANITY IS ENSLAVED. ALL BECAUSE OF YOU. I hope you're happy.");
-
-	/// @todo not immediate cleanup, let the bosses have fun for a sec or something
-	CleanWreckage();
 }
 
 ///////////////////// INVASION ENTRY POINT /////////////////////
@@ -291,7 +322,7 @@ ReorganizeTeams(pilots)
 			assignment[i] = 0; // not a client
 		}
 	}
-	
+
 	// move clients to teams. If the random selection still hasn't filled up
 	// UFO slots, then first clients encountered to be defenders will be UFO
 	for (new i = 1; i <= MaxClients; ++i)
