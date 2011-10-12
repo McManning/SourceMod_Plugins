@@ -168,10 +168,9 @@ CreateUFOHitbox(client)
 	SetEntProp(prop, Prop_Data, "m_takedamage", 2);
 	SetEntProp(prop, Prop_Data, "m_iMaxHealth", UFO_BASE_HEALTH);
 	SetEntProp(prop, Prop_Data, "m_iHealth", UFO_BASE_HEALTH);
-	
-	HookSingleEntityOutput(prop, "OnTakeDamage", EntityOutput_UFOHitPropDamage, false);
-	
-	SDKHook(prop, SDKHook_ShouldCollide, OnUFOCollisionCheck); 
+
+	SDKHook(prop, SDKHook_ShouldCollide, Hook_OnUFOCollisionCheck); 
+	SDKHook(prop, SDKHook_OnTakeDamage, Hook_OnUFOTakeDamage);
 	
 	SetEntityRenderMode(prop, RENDER_TRANSCOLOR);
 	SetEntityRenderColor(prop, 0, 0, 0, 50); /// @todo translucent only for debugging
@@ -393,7 +392,7 @@ bool:IsLookingDown(client)
  * @param contentsmask details regarding the collision (see sdkhooks_trace.inc:CONTENTS_*)
  * @return true if the collision should happen, false otherwise
  */
-public bool:OnUFOCollisionCheck(entity, collisiongroup, contentsmask, bool:originalResult)
+public bool:Hook_OnUFOCollisionCheck(entity, collisiongroup, contentsmask, bool:originalResult)
 {
 	/*
 		For a UFO on BLU team:
@@ -432,42 +431,38 @@ public bool:OnUFOCollisionCheck(entity, collisiongroup, contentsmask, bool:origi
 	return false;
 }
 
-/**	Entity output hook. When a prop with this hook is damage, will modify the color of the prop
-	to indicate the remaining health 
-	@param caller the prop firing the output
-	@param activator the prop that forced this prop to send its output
-*/
-public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, Float:delay)
+public Action:Hook_OnUFOTakeDamage(entity, &attacker, &inflictor, &Float:damage, &damagetype)
 {
-	new health = GetEntProp(caller, Prop_Data, "m_iHealth");
-	//new maxhealth = GetEntProp(caller, Prop_Data, "m_iMaxHealth");
+	new pilot = GetUFOPilotFromHitbox(entity);
 
-	// Energy weapons don't work, fire doesn't work, however the player can melee his own
-	// UFO ship to death!
+	new health = GetEntProp(entity, Prop_Data, "m_iHealth");
 	
-	new pilot = GetUFOPilotFromHitbox(caller);
-	
-	if (pilot != 0)
+	if (health-damage < 1.0) // UFO killed
 	{
-		if (health < 1) // UFO killed
+		// check for friendly fire
+		if (attacker > 0 && attacker <= MaxClients 
+			&& IsClientInGame(attacker) && GetClientTeam(attacker) == _:TFTeam_Blue)
+		{
+			damage = 0.0;
+			return Plugin_Changed;
+		}
+		else
 		{
 			g_eUFOHitbox[pilot] = 0;
 			DestroyUFO(pilot);
-			
-			// Activator is a player (proper) idk if rockets will do the same though
-			//PrintToChatAll("Activator");
-			//PrintToChatAll(">> %L", activator);
-			
-			/* @todo something involving the activator player. Or store damage stats on everyone
+
+			/* @todo something involving the attacker player. Or store damage stats on everyone
 				and eventually report the MVPs
 			*/
 		}
-		else // update the pilot with statistics
-		{
-			PrintUFOHealthHud(pilot, health, UFO_BASE_HEALTH);
-		}
 	}
-}
+	else // update the pilot with statistics
+	{
+		PrintUFOHealthHud(pilot, health, UFO_BASE_HEALTH);
+	}
+	
+	return Plugin_Continue;
+} 
 
 OnUFODisconnect(client)
 {
