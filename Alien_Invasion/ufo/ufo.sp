@@ -45,7 +45,7 @@ InitializeUFOs()
 	
 	PreloadExplodeEffect();
 	
-	HookEvent("player_death", Event_UFODeath);
+	HookEvent("player_death", Event_UFODeath, EventHookMode_Pre);
 	
 	// set starting value for all globals
 	for (new i = 0; i < MAXPLAYERS+1; ++i)
@@ -216,16 +216,17 @@ GiveUFOWeapons(client)
  */
 RemoveUFO(client)
 {
-	DestroyUFOHitboxEntity(client);
+	if (g_bIsUFO[client])
+	{
+		DestroyUFOHitboxEntity(client);
 
-	RemoveUFOModel(client);
-	SetEntityGravity(client, 1.0);
-	
-	g_bIsUFO[client] = false;
+		RemoveUFOModel(client);
+		SetEntityGravity(client, 1.0);
+		
+		g_bIsUFO[client] = false;
 
-	TF2_RespawnPlayer(client);
-	
-	// SetEntProp(client, Prop_Data, "m_takedamage", 2, 1);
+		TF2_RespawnPlayer(client);
+	}
 }
 
 /**
@@ -238,15 +239,14 @@ DestroyUFO(client)
 
 	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
 
-	// Check if all UFOs have been destroyed
-	if (CountRemainingUFO() < 1)
+	ExplodeEffectOnClient(client);
+	RemoveUFO(client);
+	
+	// Check if this was the last UFO
+	if (CountRemainingUFO() < 2)
 	{
 		ExecuteForward_OnBossLose(BossCond_NoneRemain);
 	}
-
-	ExplodeEffectOnClient(client);
-	
-	RemoveUFO(client);
 }
 
 DestroyUFOHitboxEntity(client)
@@ -465,7 +465,7 @@ OnUFODisconnect(client)
 		ExecuteForward_OnBossDeath(client, BossDeath_Disconnect);
 
 		// Check if all UFOs have been destroyed
-		if (CountRemainingUFO() < 1)
+		if (CountRemainingUFO() < 2)
 		{
 			ExecuteForward_OnBossLose(BossCond_NoneRemain);
 		}
@@ -478,6 +478,10 @@ OnUFODisconnect(client)
 	}
 }
 
+/**
+ * Triggered when a UFO player kills themselves (or by admin). Does not trigger during
+ * normal combat (as the player is assumed to be immortal, with a custom hitbox prop).
+ */
 public Action:Event_UFODeath(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
@@ -485,6 +489,7 @@ public Action:Event_UFODeath(Handle:event, const String:name[], bool:dontBroadca
 	if (client > 0 && client <= MaxClients && g_bIsUFO[client])
 	{
 		DestroyUFO(client);
+		return Plugin_Handled;
 	}
 
 	return Plugin_Continue;

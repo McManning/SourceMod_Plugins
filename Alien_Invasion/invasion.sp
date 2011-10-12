@@ -38,6 +38,7 @@ public OnPluginStart()
 	RegAdminCmd("sm_testufo", Command_TestUFO, ADMFLAG_ROOT);
 	
 	RegAdminCmd("sm_invasion", Command_TestInvasion, ADMFLAG_ROOT);
+	RegAdminCmd("sm_killinvasion", Command_KillInvasion, ADMFLAG_ROOT);
 	
 	InitializeUFOs();
 }
@@ -48,6 +49,14 @@ public Action:Command_TestInvasion(client, args)
 	return Plugin_Handled;
 }
 
+public Action:Command_KillInvasion(client, args)
+{
+	PrintToChatAll("\x05%L force killed the invasion", client);
+	
+	CleanWreckage();
+	
+	return Plugin_Handled;
+}
 
 public OnMapStart()
 {
@@ -74,6 +83,9 @@ public OnBossLose(BossCond:reason)
 	/// @todo a real (appropriate) alert. Also announcer quotes
 	PrintCenterTextAll("YOU HAVE SAVED HUMANITY!");
 	PrintToChatAll("\x05The aliens have ran back home to Gallifrey. You've done it. You've saved mankind (for now)");
+	
+	/// @todo not immediate cleanup, let the defenders have fun for a sec or something
+	CleanWreckage();
 }
 
 public OnBossWin(BossCond:reason)
@@ -82,6 +94,8 @@ public OnBossWin(BossCond:reason)
 	PrintCenterTextAll("YOU HAVE ALL DOOMED HUMANITY!");
 	PrintToChatAll("\x05THE ALIENS HAVE WON. OUR CITIES ARE BURNING. HUMANITY IS ENSLAVED. ALL BECAUSE OF YOU. I hope you're happy.");
 
+	/// @todo not immediate cleanup, let the bosses have fun for a sec or something
+	CleanWreckage();
 }
 
 ///////////////////// INVASION ENTRY POINT /////////////////////
@@ -100,11 +114,11 @@ SetupInvasion()
 	if (count > 0)
 	{
 		// set RED as defending team (open invite)
-		TeamGuard_Enable(RED_TEAM);
+		TeamGuard_Enable(TFTeam:TFTeam_Red);
 
 		ReorganizeTeams(count);
 		
-		StartInvasion();
+		StartInvasion(count);
 	}
 }
 
@@ -113,17 +127,17 @@ SetupInvasion()
  */
 SetupControlledInvasion(client)
 {
-	TeamGuard_Enable(RED_TEAM);
+	TeamGuard_Enable(TFTeam:TFTeam_Red);
 	
 	ReorganizeTeamsForSinglePilot(client);
 	
-	StartInvasion();
+	StartInvasion(1);
 }
 
 /**
  * Will send proper messages to everyone and start the invasion timers 
  */
-StartInvasion()
+StartInvasion(count)
 {
 	SendInvasionAlert();
 	
@@ -164,6 +178,10 @@ public Action:Timer_InvadersWin(Handle:timer)
 		g_hInvadersWinTimer = INVALID_HANDLE;
 
 		/// @todo somehow trigger an alien win!
+		
+		
+		// Trigger OnBossWin(BossCond:reason)
+		// reset everything
 	}
 	
 	return Plugin_Continue;
@@ -195,6 +213,7 @@ ReorganizeTeamsForSinglePilot(client)
 		if (i == client)
 		{
 			TeamGuard_MoveClientToTeam(i, TeamGuard_GetClosedTeam());
+			BecomeUFO(i);
 		} 
 		else
 		{
@@ -246,6 +265,7 @@ ReorganizeTeams(pilots)
 			if (c < pilots)
 			{
 				TeamGuard_MoveClientToTeam(i, TeamGuard_GetClosedTeam());
+				BecomeUFO(i);
 				c += 1;
 			}
 			else // defender
@@ -257,6 +277,7 @@ ReorganizeTeams(pilots)
 		{
 			// ufo
 			TeamGuard_MoveClientToTeam(i, TeamGuard_GetClosedTeam());
+			BecomeUFO(i);
 		}
 	}
 	
@@ -273,6 +294,9 @@ SendInvasionAlert()
 	PrintToChatAll("\x05Oh, by the way, you only have a few minutes before their main forces arrive and enslave humanity. Enjoy.");
 }
 
+/**
+ * Tell players the invaders will win in a minute if not defeated
+ */
 SendMinuteRemainingAlert()
 {
 	/// @todo a real (appropriate) alert. Also announcer quotes
@@ -298,11 +322,26 @@ CleanWreckage()
 		g_hMinuteRemaining = INVALID_HANDLE;
 	}
 	
-	/// @todo make sure UFOs are cleaned up
+	// clean UFO players
+	ResetAllUFOs();
 	
 	// restore teams
 	TeamGuard_Disable();
-	
+}
+
+/**
+ * Remove UFO status from all players, without triggering any forwards
+ */
+ResetAllUFOs()
+{
+	for (new i = 1; i <= MaxClients; i++)
+	{
+		// let RemoveUFO determine if they should be cleaned or not
+		if (IsClientInGame(i))
+		{
+			RemoveUFO(i);
+		}
+	}
 }
 
 
