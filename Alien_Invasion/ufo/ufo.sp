@@ -211,13 +211,11 @@ GiveUFOWeapons(client)
 
 ///////////////////// UFO DESTRUCTION /////////////////////
 
-
-DestroyUFO(client)
+/**
+ * Cleans up related UFO information from a client and respawns them
+ */
+RemoveUFO(client)
 {
-	/// @todo check for valid client!
-
-	ExplodeEffectOnClient(client);
-
 	DestroyUFOHitboxEntity(client);
 
 	RemoveUFOModel(client);
@@ -228,7 +226,16 @@ DestroyUFO(client)
 	TF2_RespawnPlayer(client);
 	
 	// SetEntProp(client, Prop_Data, "m_takedamage", 2, 1);
-	
+}
+
+/**
+ * Explodes the UFO, respawns the player cleanly, triggers the OnBossDeath forward, 
+ * and if this was the last UFO alive, triggers OnBossLose forward
+ */
+DestroyUFO(client)
+{
+	/// @todo check for valid client!
+
 	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
 
 	// Check if all UFOs have been destroyed
@@ -236,6 +243,10 @@ DestroyUFO(client)
 	{
 		ExecuteForward_OnBossLose(BossCond_NoneRemain);
 	}
+
+	ExplodeEffectOnClient(client);
+	
+	RemoveUFO(client);
 }
 
 DestroyUFOHitboxEntity(client)
@@ -449,17 +460,21 @@ public EntityOutput_UFOHitPropDamage(const String:output[], caller, activator, F
 
 OnUFODisconnect(client)
 {
-	g_bIsUFO[client] = false;
-	SetUFONotification(client, UFO_NOTIFY_NONE);
-	g_lastButtons[client] = 0;
-	DestroyUFOHitboxEntity(client);
-	
-	ExecuteForward_OnBossDeath(client, BossDeath_Slayed);
-
-	// Check if all UFOs have been destroyed
-	if (CountRemainingUFO() < 1)
+	if (g_bIsUFO[client])
 	{
-		ExecuteForward_OnBossLose(BossCond_NoneRemain);
+		ExecuteForward_OnBossDeath(client, BossDeath_Disconnect);
+
+		// Check if all UFOs have been destroyed
+		if (CountRemainingUFO() < 1)
+		{
+			ExecuteForward_OnBossLose(BossCond_NoneRemain);
+		}
+		
+		SetUFONotification(client, UFO_NOTIFY_NONE);
+	
+		DestroyUFOHitboxEntity(client);
+		g_bIsUFO[client] = false;
+		g_lastButtons[client] = 0;
 	}
 }
 
