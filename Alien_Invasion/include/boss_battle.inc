@@ -33,7 +33,8 @@ enum BossDeath
 enum BossType
 {
 	BossType_None = 0,
-	BossType_AlienInvasion
+	BossType_AlienInvasion,
+	BossType_Ghostbusters,
 };
 
 new Handle:g_fwdOnBossSpawn = INVALID_HANDLE;
@@ -47,6 +48,8 @@ new BossType:g_activeBossType = BossType_None;
 public SetActiveBossType(BossType:type)
 {
 	g_activeBossType = type;
+	
+	/// @todo call a forward like OnBossBattle(type) ?
 }
 
 public BossType:GetActiveBossType()

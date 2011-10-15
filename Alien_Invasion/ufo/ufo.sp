@@ -20,7 +20,7 @@
 /// @todo Convert to cvars
 #define UFO_HORIZONTAL_FORCE (250.0)
 #define UFO_VERTICAL_FORCE (90.0)
-#define UFO_BASE_HEALTH (5000)
+#define UFO_BASE_HEALTH (8000)
 #define UFO_PRIMARY_ANGULAR_RANGE (15)
 
 /// @todo per-map settings, not hardcoded
@@ -61,25 +61,30 @@ InitializeUFOs()
 
 }
 
+/**
+ * Loads up some alien weaponry and adds to the list of usables in TF2Items
+ */
 PreloadUFOWeapons()
 {
 	// Construct some alien weaponry
-	
-	/*
-		NOTES:
-			Property 100 is Blast Radius Decrease (0.3 is direct hit)
-	*/
-	
+
 	// primary
 	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET, "tf_weapon_particle_cannon", 
 							441, 0, 3, 100,
-							"107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0", 
+							"107 ; 2.0 ; 6 ; 0.25 ; 97 ; 0.01 ; 2 ; 10100.0 ; 100 ; 0.1", 
 							5000, "", true);
+	/*
+		107: move speed bonus
+		6: fire rate bonus
+		97: reload time decrease
+		2: damage bonus
+		100: blast radius decrease
+	*/
 	
 	// secondary
 	TF2Items_CreateWeapon(TF2ITEMS_WEAPONS_OFFSET + 1, "tf_weapon_raygun", 
 							442, 1, 3, 100,
-							"107 ; 2.0 ; 281 ; 0.0 ; 6 ; 0.25 ; 97 ; 0.01", 
+							"107 ; 2.0 ; 281 ; 0.0 ; 6 ; 0.25 ; 97 ; 0.5", 
 							5000, "", true);
 							
 	// spaceships don't need no stinkin' melee... but, just for fun
@@ -172,8 +177,9 @@ CreateUFOHitbox(client)
 	SDKHook(prop, SDKHook_ShouldCollide, Hook_OnUFOCollisionCheck); 
 	SDKHook(prop, SDKHook_OnTakeDamage, Hook_OnUFOTakeDamage);
 	
+	// hide the hitbox entity
 	SetEntityRenderMode(prop, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(prop, 0, 0, 0, 50); /// @todo translucent only for debugging
+	SetEntityRenderColor(prop, 0, 0, 0, 0);
 
 	g_eUFOHitbox[client] = prop;
 }
